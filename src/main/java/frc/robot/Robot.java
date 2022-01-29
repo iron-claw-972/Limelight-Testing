@@ -4,9 +4,10 @@
 
 package frc.robot;
 
-import com.revrobotics.CANSparkMax;
-import com.revrobotics.CANSparkMaxLowLevel.MotorType;
+import com.ctre.phoenix.motorcontrol.NeutralMode;
+import com.ctre.phoenix.motorcontrol.can.WPI_TalonFX;
 
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.NetworkTableInstance;
@@ -28,15 +29,17 @@ public class Robot extends TimedRobot {
   private String m_autoSelected;
   private final SendableChooser<String> m_chooser = new SendableChooser<>();
   
-  private final CANSparkMax m_leftMotor1 = new CANSparkMax(1, MotorType.kBrushless);
-  private final CANSparkMax m_leftMotor2 = new CANSparkMax(2, MotorType.kBrushless);
+  private final WPI_TalonFX m_leftMotor1 = new WPI_TalonFX(1);
+  //private final WPI_TalonFX m_leftMotor2 = new WPI_TalonFX(2);
 
-  private final CANSparkMax m_rightMotor1 = new CANSparkMax(3, MotorType.kBrushless);
-  private final CANSparkMax m_rightMotor2 = new CANSparkMax(4, MotorType.kBrushless);
+  private final WPI_TalonFX m_rightMotor1 = new WPI_TalonFX(2);
+  //private final WPI_TalonFX m_rightMotor2 = new WPI_TalonFX(4);
 
   private final DifferentialDrive m_drive = new DifferentialDrive(m_leftMotor1, m_rightMotor1);
 
   private final Joystick m_joystick = new Joystick(0);
+
+  private double speedFactor = 0.9;
 
   // private final double kPAim = 0.03;
   // private final double kPDistance = 0.03;
@@ -45,6 +48,9 @@ public class Robot extends TimedRobot {
   private boolean m_LimelightHasValidTarget = false;
   private double m_LimelightDriveCommand = 0.0;
   private double m_LimelightSteerCommand = 0.0;
+
+  private PIDController drivePID = new PIDController(0.05, 0, 0);
+  private PIDController steerPID = new PIDController(0.03, 0, 0);
 
   /**
    * This function is run when the robot is first started up and should be used for any
@@ -55,9 +61,12 @@ public class Robot extends TimedRobot {
     m_chooser.setDefaultOption("Default Auto", kDefaultAuto);
     m_chooser.addOption("My Auto", kCustomAuto);
     SmartDashboard.putData("Auto choices", m_chooser);
-    m_leftMotor2.follow(m_leftMotor1);
-    m_rightMotor2.follow(m_rightMotor1);
+    //m_leftMotor2.follow(m_leftMotor1);
+    //m_rightMotor2.follow(m_rightMotor1);
     m_rightMotor1.setInverted(true);
+
+    m_leftMotor1.setNeutralMode(NeutralMode.Coast);
+    m_rightMotor1.setNeutralMode(NeutralMode.Coast);
   }
 
   /**
@@ -84,7 +93,7 @@ public class Robot extends TimedRobot {
   public void autonomousInit() {
     m_autoSelected = m_chooser.getSelected();
     // m_autoSelected = SmartDashboard.getString("Auto Selector", kDefaultAuto);
-    System.out.println("Auto selected: " + m_autoSelected);
+    System.out.println("Auto selected: " + m_autoSelected);   
   }
 
   /** This function is called periodically during autonomous. */
@@ -105,26 +114,33 @@ public class Robot extends TimedRobot {
   @Override
   public void teleopInit() {}
 
+  private double deadbandPower(double power) {
+    if (Math.abs(power) < 0.02) {
+      return 0.0;
+    }
+    return power;
+  }
+
   /** This function is called periodically during operator control. */
   @Override
   public void teleopPeriodic() {
     updateLimelightTracking();
 
-    double drive = -m_joystick.getRawAxis(1);
-    double steer = m_joystick.getRawAxis(4);
+    double drive = m_joystick.getRawAxis(1);
+    double steer = -m_joystick.getRawAxis(4);
     boolean auto = m_joystick.getRawButton(1);
 
-    steer *= 0.70;
-    drive *= 0.70;
+    steer *= speedFactor;
+    drive *= speedFactor;
 
     if (auto) {
       if (m_LimelightHasValidTarget) {
-        m_drive.arcadeDrive(m_LimelightDriveCommand, m_LimelightSteerCommand);
+        m_drive.arcadeDrive(deadbandPower(-m_LimelightDriveCommand), deadbandPower(m_LimelightSteerCommand));
       } else {
         m_drive.arcadeDrive(0.0, 0.0);
       }
     } else {
-      m_drive.arcadeDrive(drive, steer);
+      m_drive.arcadeDrive(deadbandPower(drive*0.7), deadbandPower(steer*0.7));
     }
 
     // drive.arcadeDrive(-joystick.getRawAxis(1)*0.4, joystick.getRawAxis(4)*0.4);
@@ -156,8 +172,8 @@ public class Robot extends TimedRobot {
     // These numbers must be tuned for your Robot! Be careful!
     final double STEER_K = 0.03; // how hard to turn toward the target
     final double DRIVE_K = 0.26; // how hard to drive fwd toward the target
-    final double DESIRED_TARGET_AREA = 13.0; // Area of the target when the robot reaches the wall
-    final double MAX_DRIVE = 0.7; // Simple speed limit so we don't drive too fast
+    final double DESIRED_TARGET_AREA = 15.0; // Area of the target when the robot reaches the wall
+    final double MAX_DRIVE = 0.5; // Simple speed limit so we don't drive too fast
 
     double tv = NetworkTableInstance.getDefault().getTable("limelight").getEntry("tv").getDouble(0);
     double tx = NetworkTableInstance.getDefault().getTable("limelight").getEntry("tx").getDouble(0);
@@ -174,11 +190,13 @@ public class Robot extends TimedRobot {
     m_LimelightHasValidTarget = true;
 
     // Start with proportional steering
-    double steer_cmd = tx * STEER_K;
+    //double steer_cmd = tx * STEER_K;
+    double steer_cmd = steerPID.calculate(tx, 0);
     m_LimelightSteerCommand = steer_cmd;
 
     // try to drive forward until the target area reaches our desired area
-    double drive_cmd = (DESIRED_TARGET_AREA - ta) * DRIVE_K;
+    //double drive_cmd = (DESIRED_TARGET_AREA - ta) * DRIVE_K;
+    double drive_cmd = drivePID.calculate(ta, DESIRED_TARGET_AREA);
 
     // don't let the robot drive too fast into the goal
     if (drive_cmd > MAX_DRIVE) {
