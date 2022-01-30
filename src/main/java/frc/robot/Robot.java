@@ -124,16 +124,23 @@ public class Robot extends TimedRobot {
   /** This function is called periodically during operator control. */
   @Override
   public void teleopPeriodic() {
-    updateLimelightTracking();
-
     double drive = m_joystick.getRawAxis(1);
     double steer = -m_joystick.getRawAxis(4);
-    boolean auto = m_joystick.getRawButton(1);
+    boolean redAuto = m_joystick.getRawButton(2);
+    boolean blueAuto = m_joystick.getRawButton(3);
 
     steer *= speedFactor;
     drive *= speedFactor;
 
-    if (auto) {
+    System.out.println(NetworkTableInstance.getDefault().getTable("limelight").getEntry("getpipe").getNumber(0));
+
+    if (redAuto || blueAuto) {
+      updateLimelightTracking();
+      if (redAuto) {
+        NetworkTableInstance.getDefault().getTable("limelight").getEntry("pipeline").setNumber(0);
+      } else if (blueAuto) {
+        NetworkTableInstance.getDefault().getTable("limelight").getEntry("pipeline").setNumber(1);
+      }
       if (m_LimelightHasValidTarget) {
         m_drive.arcadeDrive(deadbandPower(-m_LimelightDriveCommand), deadbandPower(m_LimelightSteerCommand));
       } else {
