@@ -8,6 +8,7 @@ import com.ctre.phoenix.motorcontrol.NeutralMode;
 import com.ctre.phoenix.motorcontrol.can.WPI_TalonFX;
 
 import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.math.util.Units;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.NetworkTableInstance;
@@ -39,7 +40,7 @@ public class Robot extends TimedRobot {
 
   private final Joystick m_joystick = new Joystick(0);
 
-  private double speedFactor = 0.9;
+  private double speedFactor = 1;
 
   // private final double kPAim = 0.03;
   // private final double kPDistance = 0.03;
@@ -49,8 +50,13 @@ public class Robot extends TimedRobot {
   private double m_LimelightDriveCommand = 0.0;
   private double m_LimelightSteerCommand = 0.0;
 
-  private PIDController drivePID = new PIDController(0.05, 0, 0);
+  private PIDController drivePID = new PIDController(0.04, 0, 0);
   private PIDController steerPID = new PIDController(0.03, 0, 0);
+
+  private double tv;
+  private double tx;
+  private double ty;
+  private double ta;
 
   /**
    * This function is run when the robot is first started up and should be used for any
@@ -128,21 +134,30 @@ public class Robot extends TimedRobot {
     double steer = -m_joystick.getRawAxis(4);
     boolean redAuto = m_joystick.getRawButton(2);
     boolean blueAuto = m_joystick.getRawButton(3);
+    boolean hubAuto = m_joystick.getRawButton(1);
+    boolean distanceAuto = m_joystick.getRawButton(4);
 
     steer *= speedFactor;
     drive *= speedFactor;
 
-    System.out.println(NetworkTableInstance.getDefault().getTable("limelight").getEntry("getpipe").getNumber(0));
-
-    if (redAuto || blueAuto) {
+    if (redAuto || blueAuto || hubAuto || distanceAuto) {
       updateLimelightTracking();
       if (redAuto) {
         NetworkTableInstance.getDefault().getTable("limelight").getEntry("pipeline").setNumber(0);
       } else if (blueAuto) {
         NetworkTableInstance.getDefault().getTable("limelight").getEntry("pipeline").setNumber(1);
+      } else if (hubAuto || distanceAuto) {
+        NetworkTableInstance.getDefault().getTable("limelight").getEntry("pipeline").setNumber(2);
+        m_LimelightDriveCommand = 0;
       }
       if (m_LimelightHasValidTarget) {
-        m_drive.arcadeDrive(deadbandPower(-m_LimelightDriveCommand), deadbandPower(m_LimelightSteerCommand));
+        System.out.println("Throttle: " + (-m_LimelightDriveCommand));
+        System.out.println("Turn: " + (m_LimelightSteerCommand));
+        if (distanceAuto) {
+          System.out.println("Distance to target: " + (getDistanceFromTarget(ty, 100, 33.86, 5)));
+        } else {
+          m_drive.arcadeDrive(deadbandPower(-m_LimelightDriveCommand), m_LimelightSteerCommand*2);
+        }
       } else {
         m_drive.arcadeDrive(0.0, 0.0);
       }
@@ -175,19 +190,23 @@ public class Robot extends TimedRobot {
     
   }
 
+  public double getDistanceFromTarget(double targetAngle, double targetHeight, double limelightAngle, double limelightHeight) {
+    return (targetHeight - limelightHeight) / Math.tan(Units.degreesToRadians(limelightAngle + targetAngle));
+  }
+
   public void updateLimelightTracking() {
     // These numbers must be tuned for your Robot! Be careful!
     final double STEER_K = 0.03; // how hard to turn toward the target
     final double DRIVE_K = 0.26; // how hard to drive fwd toward the target
     final double DESIRED_TARGET_AREA = 15.0; // Area of the target when the robot reaches the wall
-    final double MAX_DRIVE = 0.5; // Simple speed limit so we don't drive too fast
+    final double MAX_DRIVE = 0.9; // Simple speed limit so we don't drive too fast
 
-    double tv = NetworkTableInstance.getDefault().getTable("limelight").getEntry("tv").getDouble(0);
-    double tx = NetworkTableInstance.getDefault().getTable("limelight").getEntry("tx").getDouble(0);
-    double ty = NetworkTableInstance.getDefault().getTable("limelight").getEntry("ty").getDouble(0);
-    double ta = NetworkTableInstance.getDefault().getTable("limelight").getEntry("ta").getDouble(0);
+    tv = NetworkTableInstance.getDefault().getTable("limelight").getEntry("tv").getDouble(0);
+    tx = NetworkTableInstance.getDefault().getTable("limelight").getEntry("tx").getDouble(0);
+    ty = NetworkTableInstance.getDefault().getTable("limelight").getEntry("ty").getDouble(0);
+    ta = NetworkTableInstance.getDefault().getTable("limelight").getEntry("ta").getDouble(0);
 
-    if (tv < 1.0) {
+    if (tv < 0.05) {
       m_LimelightHasValidTarget = false;
       m_LimelightDriveCommand = 0.0;
       m_LimelightSteerCommand = 0.0;
