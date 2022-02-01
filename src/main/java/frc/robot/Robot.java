@@ -132,30 +132,33 @@ public class Robot extends TimedRobot {
   public void teleopPeriodic() {
     double drive = m_joystick.getRawAxis(1);
     double steer = -m_joystick.getRawAxis(4);
-    boolean redAuto = m_joystick.getRawButton(2);
-    boolean blueAuto = m_joystick.getRawButton(3);
-    boolean hubAuto = m_joystick.getRawButton(1);
-    boolean distanceAuto = m_joystick.getRawButton(4);
+    boolean redButton = m_joystick.getRawButton(2);
+    boolean blueButton = m_joystick.getRawButton(3);
+    boolean greenButton = m_joystick.getRawButton(1);
+    boolean yellowButton = m_joystick.getRawButton(4);
 
     steer *= speedFactor;
     drive *= speedFactor;
 
-    if (redAuto || blueAuto || hubAuto || distanceAuto) {
+    if (redButton || blueButton || greenButton || yellowButton) {
       updateLimelightTracking();
-      if (redAuto) {
+      if (redButton) {
         NetworkTableInstance.getDefault().getTable("limelight").getEntry("pipeline").setNumber(0);
-      } else if (blueAuto) {
+      } else if (blueButton) {
         NetworkTableInstance.getDefault().getTable("limelight").getEntry("pipeline").setNumber(1);
-      } else if (hubAuto || distanceAuto) {
+      } else if (greenButton) {
         NetworkTableInstance.getDefault().getTable("limelight").getEntry("pipeline").setNumber(2);
         m_LimelightDriveCommand = 0;
       }
       if (m_LimelightHasValidTarget) {
         System.out.println("Throttle: " + (-m_LimelightDriveCommand));
         System.out.println("Turn: " + (m_LimelightSteerCommand));
-        if (distanceAuto) {
+        if (greenButton) {
           System.out.println("Distance to target: " + (getDistanceFromTarget(ty, 100, 33.86, 5)));
-        } else {
+        } else if (blueButton || redButton) {
+          System.out.println("Distance to target: " + (getDistanceFromTarget(ty, 4.25, 33.86, 5)));
+        }
+        if (blueButton || redButton || greenButton) {
           m_drive.arcadeDrive(deadbandPower(-m_LimelightDriveCommand), m_LimelightSteerCommand*2);
         }
       } else {
